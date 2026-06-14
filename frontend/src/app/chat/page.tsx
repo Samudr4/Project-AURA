@@ -184,6 +184,8 @@ export default function ChatPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
+      let errorOccurred = false;
+      let errorMessage = '';
 
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -201,6 +203,9 @@ export default function ChatPage() {
                   setActiveModel({ name: parsed.model, provider: parsed.provider });
                 } else if (parsed.type === 'token') {
                   setStreamingText(prev => prev + parsed.content);
+                } else if (parsed.type === 'error') {
+                  errorOccurred = true;
+                  errorMessage = parsed.content || parsed.message || 'Unknown error';
                 } else if (parsed.type === 'done') {
                   done = true;
                 }
@@ -212,10 +217,27 @@ export default function ChatPage() {
         }
       }
 
-      // Reload history to replace optimistic updates and stream caches with exact DB states
-      fetchHistory(activeChatId);
-    } catch (err) {
+      if (errorOccurred) {
+        const tempAssistantMsg: Message = {
+          id: Math.random().toString(),
+          role: 'assistant',
+          content: `Error: ${errorMessage}`,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, tempAssistantMsg]);
+      } else {
+        // Reload history to replace optimistic updates and stream caches with exact DB states
+        fetchHistory(activeChatId);
+      }
+    } catch (err: any) {
       console.error("Streaming message failed", err);
+      const tempAssistantMsg: Message = {
+        id: Math.random().toString(),
+        role: 'assistant',
+        content: `Connection Error: ${err.message || 'Could not connect to the backend'}`,
+        createdAt: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, tempAssistantMsg]);
     } finally {
       setLoading(false);
       setStreamingText('');
